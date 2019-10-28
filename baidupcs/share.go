@@ -3,6 +3,9 @@ package baidupcs
 import (
 	"errors"
 	"github.com/iikira/BaiduPCS-Go/baidupcs/pcserror"
+	"github.com/PuerkitoBio/goquery"
+	"regexp"
+	"strconv"
 )
 
 type (
@@ -36,6 +39,19 @@ type (
 
 	shareListJSON struct {
 		List ShareRecordInfoList `json:"list"`
+		*pcserror.PanErrorInfo
+	}
+
+	// ShareFileInfo 分享文件信息
+	ShareFileInfo struct {
+		SourceID		string	`json:"sourceId"`
+		ShareID         int64   `json:"shareId"`
+		FsIds           []int64 `json:"fsIds"`
+		ShareUK			int64   `json:"shareUk"` // 文件类型
+	}
+
+	transferJSON struct {
+		ErrorNo	int	`json:"errno"`
 		*pcserror.PanErrorInfo
 	}
 )
@@ -77,7 +93,7 @@ func (pcs *BaiduPCS) ShareSet(paths []string, option *ShareOption) (s *Shared, p
 		option = &ShareOption{}
 	}
 
-	dataReadCloser, pcsError := pcs.PrepareSharePSet(paths, option.Period)
+	dataReadCloser, pcsError := pcs.PrepareSharePSet(paths, option.Period, option.Password)
 	if pcsError != nil {
 		return
 	}
@@ -103,6 +119,189 @@ func (pcs *BaiduPCS) ShareSet(paths []string, option *ShareOption) (s *Shared, p
 
 	return jsonData.Shared, nil
 }
+
+// ShareSet 分享文件
+func (pcs *BaiduPCS) ShareInfo(sourceID string, pwd string) (v bool, pcsError pcserror.Error) {
+	var valid bool
+	resp, dataReadCloser, pcsError := pcs.PrepareShareVerify(sourceID, pwd)
+
+	if pcsError != nil {
+		return
+	}
+
+	defer dataReadCloser.Close()
+	errInfo := pcserror.NewPanErrorInfo(OperationShareVarify)
+	var BDCLND string
+	cookie := resp.Cookies()
+	for i:=0 ;i < len(cookie); i++ {
+		if cookie[i].Name == "BDCLND" {
+			BDCLND = cookie[i].Value
+		}
+	}
+
+	if BDCLND == "" {
+		errInfo.ErrType = pcserror.ErrTypeOthers
+		errInfo.Err = ErrShareLinkNotFound
+		return false, errInfo
+	} else {
+		valid = true
+	}
+	return valid, nil
+}
+
+// ShareSet 分享文件
+func (pcs *BaiduPCS) ShareVarify(sourceID string, pwd string) (v bool, pcsError pcserror.Error) {
+	var valid bool
+	resp, dataReadCloser, pcsError := pcs.PrepareShareVerify(sourceID, pwd)
+
+	if pcsError != nil {
+		return
+	}
+
+	defer dataReadCloser.Close()
+	errInfo := pcserror.NewPanErrorInfo(OperationShareVarify)
+	var BDCLND string
+	cookie := resp.Cookies()
+	for i:=0 ;i < len(cookie); i++ {
+		if cookie[i].Name == "BDCLND" {
+			BDCLND = cookie[i].Value
+		}
+	}
+
+	if BDCLND == "" {
+		errInfo.ErrType = pcserror.ErrTypeOthers
+		errInfo.Err = ErrShareLinkNotFound
+		return false, errInfo
+	} else {
+		valid = true
+	}
+	return valid, nil
+}
+
+
+// ShareParse 解析分享文件信息
+func (pcs *BaiduPCS) ShareParse(sourceID string, pwd string) (shareFileInfo ShareFileInfo, pcsError pcserror.Error) {
+	shareFileInfo.SourceID = sourceID
+	_, dataReadCloser, pcsError := pcs.PrepareShareParse(sourceID, pwd)
+
+	if pcsError != nil {
+		return
+	}
+
+	errInfo := pcserror.NewPanErrorInfo(OperationShareVarify)
+	docs, err := goquery.NewDocumentFromReader(dataReadCloser)
+
+	if err != nil {
+		return shareFileInfo, errInfo
+	}
+	defer dataReadCloser.Close()
+	var matched bool
+	var content string
+	docs.Find("html").Find("body").Find("script").Each(func(i int, selection *goquery.Selection) {
+		matched, _ = regexp.MatchString("yunData\\.setData\\(\\{", selection.Text())
+		if matched {
+			content = selection.Text()
+		}
+	})
+	if matched {
+		re, _ := regexp.Compile("\"uk\":([0-9]+),")
+		matchedValues := re.FindStringSubmatch(content)
+		if len(matchedValues) >= 2 {
+			shareFileInfo.ShareUK, _ = strconv.ParseInt(matchedValues[1], 10, 64)
+		}
+		re, _ = regexp.Compile("\"shareid\":([0-9]+),")
+		matchedValues = re.FindStringSubmatch(content)
+		if len(matchedValues) >= 2 {
+			shareFileInfo.ShareID, _ = strconv.ParseInt(matchedValues[1], 10, 64)
+		}
+		re, _ = regexp.Compile("\"fs_id\":([0-9]+),")
+		matchedValueList := re.FindAllStringSubmatch(content, -1)
+		if len(matchedValueList) >= 1 {
+			var FsIds []int64
+			for i := 0; i < len(matchedValueList); i++ {
+				fs_id, _ := strconv.ParseInt(matchedValueList[i][1], 10, 64)
+				FsIds = append(FsIds, fs_id)
+			}
+			shareFileInfo.FsIds = removeDuplicateElement(FsIds[:])
+		}
+	}
+	if ! matched {
+		errInfo.ErrType = pcserror.ErrTypeOthers
+		errInfo.Err = ErrShareLinkNotFound
+		return shareFileInfo, errInfo
+	}
+
+	return shareFileInfo, nil
+}
+
+// ShareParse 解析分享文件信息
+func (pcs *BaiduPCS) ShareTransfer(sourceID string, pwd string, path string) (ErrorNo int, pcsError pcserror.Error) {
+
+	shareFileInfo := ShareFileInfo{SourceID:sourceID}
+
+	resp, dataReadCloser, pcsError := pcs.PrepareShareParse(sourceID, pwd)
+
+	if pcsError != nil {
+		return 1000, pcsError
+	}
+
+	errInfo := pcserror.NewPanErrorInfo(OperationShareParse)
+	jsonData := transferJSON{
+		ErrorNo: 1000,
+		PanErrorInfo: errInfo,
+	}
+	docs, err := goquery.NewDocumentFromReader(dataReadCloser)
+
+	if err != nil {
+		return jsonData.ErrorNo, errInfo
+	}
+
+	defer dataReadCloser.Close()
+	var matched bool
+	var content string
+	docs.Find("html").Find("body").Find("script").Each(func(i int, selection *goquery.Selection) {
+		matched, _ = regexp.MatchString("yunData\\.setData\\(\\{", selection.Text())
+		if matched {
+			content = selection.Text()
+		}
+	})
+	if matched {
+		re, _ := regexp.Compile("\"uk\":([0-9]+),")
+		matchedValues := re.FindStringSubmatch(content)
+		if len(matchedValues) >= 2 {
+			shareFileInfo.ShareUK, _ = strconv.ParseInt(matchedValues[1], 10, 64)
+		}
+		re, _ = regexp.Compile("\"shareid\":([0-9]+),")
+		matchedValues = re.FindStringSubmatch(content)
+		if len(matchedValues) >= 2 {
+			shareFileInfo.ShareID, _ = strconv.ParseInt(matchedValues[1], 10, 64)
+		}
+		re, _ = regexp.Compile("\"fs_id\":([0-9]+),")
+		matchedValueList := re.FindAllStringSubmatch(content, -1)
+		if len(matchedValueList) >= 1 {
+			var FsIds []int64
+			for i := 0; i < len(matchedValueList); i++ {
+				fs_id, _ := strconv.ParseInt(matchedValueList[i][1], 10, 64)
+				FsIds = append(FsIds, fs_id)
+			}
+			shareFileInfo.FsIds = removeDuplicateElement(FsIds[:])
+		}
+	} else {
+		errInfo.ErrType = pcserror.ErrTypeOthers
+		errInfo.Err = ErrShareLinkNotFound
+		return jsonData.ErrorNo, errInfo
+	}
+	pcs.client.Jar.SetCookies(resp.Request.URL, resp.Cookies())
+	dataReadCloser, pcsError = pcs.PrepareShareTransfer(shareFileInfo, path)
+
+	pcsError = pcserror.HandleJSONParse(OperationShareTransfer, dataReadCloser, &jsonData)
+	if pcsError != nil {
+		return
+	}
+
+	return jsonData.ErrorNo, nil
+}
+
 
 // ShareCancel 取消分享
 func (pcs *BaiduPCS) ShareCancel(shareIDs []int64) (pcsError pcserror.Error) {

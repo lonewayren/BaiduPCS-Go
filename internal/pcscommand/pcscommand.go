@@ -20,3 +20,8 @@ func GetActiveUser() *pcsconfig.Baidu {
 func GetBaiduPCS() *baidupcs.BaiduPCS {
 	return pcsconfig.Config.ActiveUserBaiduPCS()
 }
+
+// GetBaiduPCS 从配置读取BaiduPCS
+func GetGuestPCS() *baidupcs.BaiduPCS {
+	return pcsconfig.Config.Guest()
+}

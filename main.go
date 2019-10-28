@@ -1400,51 +1400,166 @@ func main() {
 				return nil
 			},
 			Subcommands: []cli.Command{
+					{
+						Name:        "set",
+						Aliases:     []string{"s"},
+						Usage:       "设置分享文件/目录",
+						UsageText:   app.Name + " share set <文件/目录1> <文件/目录2> ...",
+						Description: `目前只支持创建私密链接.`,
+						Action: func(c *cli.Context) error {
+							if c.NArg() < 1 {
+								cli.ShowCommandHelp(c, c.Command.Name)
+								return nil
+							}
+							pcscommand.RunShareSet(c.Args(), nil)
+							return nil
+						},
+					},
+					{
+						Name:      "list",
+						Aliases:   []string{"l"},
+						Usage:     "列出已分享文件/目录",
+						UsageText: app.Name + " share list",
+						Action: func(c *cli.Context) error {
+							pcscommand.RunShareList(c.Int("page"))
+							return nil
+						},
+						Flags: []cli.Flag{
+							cli.IntFlag{
+								Name:  "page",
+								Usage: "分享列表的页数",
+								Value: 1,
+							},
+						},
+					},
+					{
+						Name:        "cancel",
+						Aliases:     []string{"c"},
+						Usage:       "取消分享文件/目录",
+						UsageText:   app.Name + " share cancel <shareid_1> <shareid_2> ...",
+						Description: `目前只支持通过分享id (shareid) 来取消分享.`,
+						Action: func(c *cli.Context) error {
+							if c.NArg() < 1 {
+								cli.ShowCommandHelp(c, c.Command.Name)
+								return nil
+							}
+							pcscommand.RunShareCancel(converter.SliceStringToInt64(c.Args()))
+							return nil
+						},
+					},
+					{
+						Name:        "nset",
+						Aliases:     []string{"ns"},
+						Usage:       "设置分享文件/目录",
+						UsageText:   app.Name + " share set <文件/目录1> <文件/目录2> ... --pwd <sharePwd> --period <sharePeriod>",
+						Description: `目前只支持创建私密链接.`,
+						Action: func(c *cli.Context) error {
+							option := baidupcs.ShareOption{}
+							if c.NArg() < 1 {
+								cli.ShowCommandHelp(c, c.Command.Name)
+								return nil
+							}
+							if c.IsSet("pwd") {
+								option.Password = c.String("pwd")
+							}
+							if c.IsSet("period") {
+								option.Period = c.Int("period")
+							}
+							pcscommand.RunShareSet(c.Args(), &option)
+							return nil
+						},
+						Flags: []cli.Flag{
+							cli.StringFlag{
+								Name:  "pwd",
+								Usage: "分享密码",
+							},
+							cli.StringFlag{
+								Name:  "period",
+								Usage: "分享类型",
+							},
+						},
+					},
+					{
+						Name:        "varify",
+						Aliases:     []string{"v"},
+						Usage:       "验证分享是否失效",
+						UsageText:   app.Name + " share varify <sourceID> --pwd <sharePwd>",
+						Description: ``,
+						Action: func(c *cli.Context) error {
+							if c.NArg() != 1 {
+								cli.ShowCommandHelp(c, c.Command.Name)
+								return nil
+							}
+							var pwd string
+							if c.IsSet("pwd") {
+								pwd = c.String("pwd")
+							}
+							pcscommand.RunShareVarify(c.Args()[0], pwd)
+							return nil
+						},
+						Flags: []cli.Flag{
+							cli.StringFlag{
+								Name:  "pwd",
+								Usage: "分享密码",
+							},
+						},
+					},
+					{
+						Name:        "parse",
+						Aliases:     []string{"p"},
+						Usage:       "解析分享文件信息",
+						UsageText:   app.Name + " share parse <sourceID> --pwd <sharePwd>",
+						Description: ``,
+						Action: func(c *cli.Context) error {
+							if c.NArg() != 1 {
+								cli.ShowCommandHelp(c, c.Command.Name)
+								return nil
+							}
+							var pwd string
+							if c.IsSet("pwd") {
+								pwd = c.String("pwd")
+							}
+							pcscommand.RunShareParse(c.Args()[0], pwd)
+							return nil
+						},
+						Flags: []cli.Flag{
+							cli.StringFlag{
+								Name:  "pwd",
+								Usage: "分享密码",
+							},
+						},
+					},
 				{
-					Name:        "set",
-					Aliases:     []string{"s"},
-					Usage:       "设置分享文件/目录",
-					UsageText:   app.Name + " share set <文件/目录1> <文件/目录2> ...",
-					Description: `目前只支持创建私密链接.`,
+					Name:        "transfer",
+					Aliases:     []string{"t"},
+					Usage:       "解析分享文件信息",
+					UsageText:   app.Name + " share transfer <sourceID> --pwd <sharePwd> --path <path>",
+					Description: ``,
 					Action: func(c *cli.Context) error {
-						if c.NArg() < 1 {
+						if c.NArg() != 1 {
 							cli.ShowCommandHelp(c, c.Command.Name)
 							return nil
 						}
-						pcscommand.RunShareSet(c.Args(), nil)
-						return nil
-					},
-				},
-				{
-					Name:      "list",
-					Aliases:   []string{"l"},
-					Usage:     "列出已分享文件/目录",
-					UsageText: app.Name + " share list",
-					Action: func(c *cli.Context) error {
-						pcscommand.RunShareList(c.Int("page"))
+						var pwd string
+						if c.IsSet("pwd") {
+							pwd = c.String("pwd")
+						}
+						var path = "/"
+						if c.IsSet("path") {
+							path = c.String("path")
+						}
+						pcscommand.RunShareTransfer(c.Args()[0], pwd, path)
 						return nil
 					},
 					Flags: []cli.Flag{
-						cli.IntFlag{
-							Name:  "page",
-							Usage: "分享列表的页数",
-							Value: 1,
+						cli.StringFlag{
+							Name:  "pwd",
+							Usage: "分享密码",
 						},
-					},
-				},
-				{
-					Name:        "cancel",
-					Aliases:     []string{"c"},
-					Usage:       "取消分享文件/目录",
-					UsageText:   app.Name + " share cancel <shareid_1> <shareid_2> ...",
-					Description: `目前只支持通过分享id (shareid) 来取消分享.`,
-					Action: func(c *cli.Context) error {
-						if c.NArg() < 1 {
-							cli.ShowCommandHelp(c, c.Command.Name)
-							return nil
-						}
-						pcscommand.RunShareCancel(converter.SliceStringToInt64(c.Args()))
-						return nil
+						cli.StringFlag{
+							Name:  "path",
+							Usage: "分享密码",
+						},
 					},
 				},
 			},

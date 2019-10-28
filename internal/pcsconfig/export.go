@@ -46,6 +46,14 @@ func (c *PCSConfig) ActiveUserBaiduPCS() *baidupcs.BaiduPCS {
 	return c.pcs
 }
 
+// ActiveUserBaiduPCS 获取当前登录的用户的baidupcs.BaiduPCS
+func (c *PCSConfig) Guest() *baidupcs.BaiduPCS {
+	if c.pcs == nil {
+		c.pcs = c.ActiveUser().GuestPCS()
+	}
+	return c.pcs
+}
+
 // BaiduUserList 获取百度用户列表
 func (c *PCSConfig) BaiduUserList() BaiduUserList {
 	return c.baiduUserList

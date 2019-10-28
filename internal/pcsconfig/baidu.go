@@ -48,6 +48,12 @@ func (baidu *Baidu) BaiduPCS() *baidupcs.BaiduPCS {
 	return pcs
 }
 
+// BaiduPCS 初始化空白*baidupcs.BaiduPCS
+func (baidu *Baidu) GuestPCS() *baidupcs.BaiduPCS {
+	pcs := baidupcs.NewPCS(Config.appID, baidu.BDUSS)
+	return pcs
+}
+
 // GetSavePath 根据提供的网盘文件路径 path, 返回本地储存路径,
 // 返回绝对路径, 获取绝对路径出错时才返回相对路径...
 func (baidu *Baidu) GetSavePath(path string) string {

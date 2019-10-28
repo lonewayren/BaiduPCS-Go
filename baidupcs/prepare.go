@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/iikira/BaiduPCS-Go/baidupcs/pcserror"
 	"github.com/iikira/BaiduPCS-Go/pcsutil/converter"
+	"github.com/iikira/BaiduPCS-Go/requester"
 	"github.com/iikira/BaiduPCS-Go/requester/multipartreader"
 	"github.com/json-iterator/go"
 	"io"
@@ -668,7 +669,7 @@ func (pcs *BaiduPCS) PrepareCloudDlClearTask() (dataReadCloser io.ReadCloser, pc
 }
 
 // PrepareSharePSet 私密分享文件, 只返回服务器响应数据和错误信息
-func (pcs *BaiduPCS) PrepareSharePSet(paths []string, period int) (dataReadCloser io.ReadCloser, pcsError pcserror.Error) {
+func (pcs *BaiduPCS) PrepareSharePSet(paths []string, period int, password string) (dataReadCloser io.ReadCloser, pcsError pcserror.Error) {
 	pcs.lazyInit()
 	pcsURL := &url.URL{
 		Scheme: GetHTTPScheme(pcs.isHTTPS),
@@ -678,13 +679,24 @@ func (pcs *BaiduPCS) PrepareSharePSet(paths []string, period int) (dataReadClose
 
 	errInfo := pcserror.NewPanErrorInfo(OperationShareSet)
 	baiduPCSVerbose.Infof("%s URL: %s\n", OperationShareSet, pcsURL)
-
-	resp, err := pcs.client.Req("POST", pcsURL.String(), map[string]string{
-		"path_list":    mergeStringList(paths...),
-		"schannel":     "0",
-		"channel_list": "[]",
-		"period":       strconv.Itoa(period),
-	}, map[string]string{
+	var body map[string]string
+	if password != "" {
+		body = map[string]string{
+			"path_list":    mergeStringList(paths...),
+			"schannel":     "4",
+			"channel_list": "[]",
+			"period":       strconv.Itoa(period),
+			"pwd": 			password,
+		}
+	} else {
+		body = map[string]string{
+			"path_list":    mergeStringList(paths...),
+			"schannel":     "0",
+			"channel_list": "[]",
+			"period":       strconv.Itoa(period),
+		}
+	}
+	resp, err := pcs.client.Req("POST", pcsURL.String(), body, map[string]string{
 		"Content-Type": "application/x-www-form-urlencoded",
 		"User-Agent":   NetdiskUA,
 	})
@@ -695,6 +707,180 @@ func (pcs *BaiduPCS) PrepareSharePSet(paths []string, period int) (dataReadClose
 	}
 	return resp.Body, nil
 }
+
+// PrepareSharePSet 私密分享文件, 只返回服务器响应数据和错误信息
+func (pcs *BaiduPCS) PrepareShareVerify(sourceId string, pwd string) (resp *http.Response, dataReadCloser io.ReadCloser, pcsError pcserror.Error) {
+	pcs.lazyInit()
+	pcsURL := &url.URL{
+		Scheme: GetHTTPScheme(true),
+		Host:   PanBaiduCom,
+	}
+	errInfo := pcserror.NewPanErrorInfo(OperationShareVarify)
+	baiduPCSVerbose.Infof("%s URL: %s\n", OperationShareVarify, pcsURL)
+	if pwd != "" {
+		pcsURL.Path = "share/verify"
+		pcsURL.RawQuery=(url.Values{
+			"surl": []string{sourceId},
+		}).Encode()
+		body := map[string]string{
+			"pwd":    		pwd,
+			"vcode":   		"",
+			"vcode_str": 	"",
+		}
+		pcs.client.ResetCookiejar()
+		resp, err := pcs.client.Req("POST", pcsURL.String(), body, map[string]string{
+			"Content-Type": "application/x-www-form-urlencoded",
+			"User-Agent":   NetdiskUA,
+			"Referer": PanBaiduCom + "/share/init?surl=" + sourceId,
+		})
+		if err != nil {
+			handleRespClose(resp)
+			errInfo.SetNetError(err)
+			return nil,nil, errInfo
+		}
+
+		return resp, resp.Body, nil
+	} else {
+		pcsURL.Path = "s/1" + sourceId
+		pcs.client.ResetCookiejar()
+		resp, err := pcs.client.Req("GET", pcsURL.String(), nil, map[string]string{
+			"User-Agent":   WebdiskUA,
+			"Connection": "keep-alive",
+			"Upgrade-Insecure-Requests": "1",
+			"Sec-Fetch-Mode": "navigate",
+			"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3",
+			"Sec-Fetch-Site": "none",
+			"Accept-Encoding": "gzip",
+			"Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+		})
+
+		if err != nil {
+			handleRespClose(resp)
+			errInfo.SetNetError(err)
+			return nil, nil, errInfo
+		}
+		return resp, resp.Body, nil
+	}
+}
+
+// PrepareSharePSet 私密分享文件, 只返回服务器响应数据和错误信息
+func (pcs *BaiduPCS) PrepareShareParse(sourceId string, pwd string) (resp *http.Response, dataReadCloser io.ReadCloser, pcsError pcserror.Error) {
+	pcs.lazyInit()
+	pcsURL := &url.URL{
+		Scheme: GetHTTPScheme(true),
+		Host:   PanBaiduCom,
+	}
+	errInfo := pcserror.NewPanErrorInfo(OperationShareVarify)
+	baiduPCSVerbose.Infof("%s URL: %s\n", OperationShareVarify, pcsURL)
+	client := requester.NewHTTPClient()
+	client.ResetCookiejar()
+	if pwd != "" {
+		pcsURL.Path = "share/verify"
+		pcsURL.RawQuery=(url.Values{
+			"surl": []string{sourceId},
+		}).Encode()
+		body := map[string]string{
+			"pwd":    		pwd,
+			"vcode":   		"",
+			"vcode_str": 	"",
+		}
+		//pcs.client.ResetCookiejar()
+		resp, err := client.Req("POST", pcsURL.String(), body, map[string]string{
+			"Content-Type": "application/x-www-form-urlencoded",
+			"User-Agent":   NetdiskUA,
+			"Referer": PanBaiduCom + "/share/init?surl=" + sourceId,
+		})
+		if err != nil {
+			handleRespClose(resp)
+			errInfo.SetNetError(err)
+			return nil, nil, errInfo
+		}
+		client.Jar.SetCookies(pcsURL, resp.Cookies())
+		pcsURL.Path = "s/1" + sourceId
+		resp, err = client.Req("GET", pcsURL.String(), nil, map[string]string{
+			"User-Agent":   WebdiskUA,
+			"Connection": "keep-alive",
+			"Upgrade-Insecure-Requests": "1",
+			"Sec-Fetch-Mode": "navigate",
+			"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3",
+			"Accept-Encoding": "",
+			"Sec-Fetch-Site": "none",
+			"Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+		})
+
+		if err != nil {
+			handleRespClose(resp)
+			errInfo.SetNetError(err)
+			return nil, nil, errInfo
+		}
+		return resp, resp.Body, nil
+	} else {
+		pcsURL.Path = "s/1" + sourceId
+		//pcs.client.ResetCookiejar()
+		resp, err := client.Req("GET", pcsURL.String(), nil, map[string]string{
+			"User-Agent":   WebdiskUA,
+			"Connection": "keep-alive",
+			"Upgrade-Insecure-Requests": "1",
+			"Sec-Fetch-Mode": "navigate",
+			"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3",
+			"Accept-Encoding": "",
+			"Sec-Fetch-Site": "none",
+			"Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+		})
+
+		if err != nil{
+			handleRespClose(resp)
+			errInfo.SetNetError(err)
+			return nil, nil, errInfo
+		}
+		//cookie := resp.Cookies()
+		//var BDCLND string
+		//for i:=0 ;i < len(cookie); i++ {
+		//	if cookie[i].Name == "BDCLND" {
+		//		BDCLND = cookie[i].Value
+		//	}
+		//}
+		//
+		//if BDCLND == "" {
+		//	errInfo.ErrType = pcserror.ErrTypeOthers
+		//	errInfo.Err = ErrShareLinkNotFound
+		//	return nil, nil, errInfo
+		//}
+		return resp, resp.Body, nil
+	}
+}
+
+// PrepareSharePSet 转存分享文件
+func (pcs *BaiduPCS) PrepareShareTransfer(shareFileInfo ShareFileInfo, path string) (dataReadCloser io.ReadCloser, pcsError pcserror.Error) {
+	pcs.lazyInit()
+	pcsURL := &url.URL{
+		Scheme: GetHTTPScheme(true),
+		Host:   PanBaiduCom,
+		Path: "share/transfer",
+		RawQuery: (url.Values{
+			"shareid": []string{strconv.FormatInt(shareFileInfo.ShareID,10)},
+			"from": []string{strconv.FormatInt(shareFileInfo.ShareUK,10)},
+		}).Encode(),
+	}
+	body := map[string]string{
+		"fsidlist":    	mergeInt64List(shareFileInfo.FsIds...),
+		"path":   		path,
+	}
+	errInfo := pcserror.NewPanErrorInfo(OperationShareVarify)
+	baiduPCSVerbose.Infof("%s URL: %s\n", OperationShareVarify, pcsURL)
+	resp, err := pcs.client.Req("POST", pcsURL.String(), body, map[string]string{
+		"Content-Type": "application/x-www-form-urlencoded",
+		"User-Agent":   NetdiskUA,
+		"Referer": PanBaiduCom + "/s/1" + shareFileInfo.SourceID,
+	})
+	if err != nil {
+		handleRespClose(resp)
+		errInfo.SetNetError(err)
+		return nil, errInfo
+	}
+	return resp.Body, nil
+}
+
 
 // PrepareShareCancel 取消分享, 只返回服务器响应数据和错误信息
 func (pcs *BaiduPCS) PrepareShareCancel(shareIDs []int64) (dataReadCloser io.ReadCloser, pcsError pcserror.Error) {

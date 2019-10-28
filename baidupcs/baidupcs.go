@@ -69,6 +69,12 @@ const (
 	OperationCloudDlClearTask = "清空离线下载任务记录"
 	// OperationShareSet 创建分享链接
 	OperationShareSet = "创建分享链接"
+	// OperationShareTransfer 转存分享链接
+	OperationShareTransfer = "转存分享链接"
+	// OperationShareVarify 验证分享链接
+	OperationShareVarify = "验证分享链接"
+	// OperationShareParse 解析分享链接文件
+	OperationShareParse = "解析分享链接文件"
 	// OperationShareCancel 取消分享
 	OperationShareCancel = "取消分享"
 	// OperationShareList 列出分享列表
@@ -101,6 +107,8 @@ const (
 	PanAppID = "250528"
 	// NetdiskUA 网盘客户端ua
 	NetdiskUA = "netdisk;8.12.9;;android-android;7.0;JSbridge3.0.0"
+	// WebdiskUA 网盘Web ua
+	WebdiskUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/76.0.3809.100 Safari/537.36"
 	// PathSeparator 路径分隔符
 	PathSeparator = "/"
 )
@@ -152,6 +160,16 @@ func NewPCS(appID int, bduss string) *BaiduPCS {
 			Domain: ".baidu.com",
 		},
 	})
+
+	return &BaiduPCS{
+		appID:  appID,
+		client: client,
+	}
+}
+
+func NewGuestPCS(appID int, bduss string) *BaiduPCS {
+	client := requester.NewHTTPClient()
+	client.ResetCookiejar()
 
 	return &BaiduPCS{
 		appID:  appID,

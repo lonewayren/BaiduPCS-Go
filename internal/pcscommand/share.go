@@ -10,6 +10,8 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"encoding/json"
+	"github.com/iikira/BaiduPCS-Go/baidupcs/pcserror"
 )
 
 var (
@@ -32,6 +34,50 @@ func RunShareSet(paths []string, option *baidupcs.ShareOption) {
 	}
 
 	fmt.Printf("shareID: %d, 链接: %s\n", shared.ShareID, shared.Link)
+}
+
+// RunShareVarify 验证分享
+func RunShareVarify(sourceID string, pwd string) {
+	valid, err := GetBaiduPCS().ShareVarify(sourceID, pwd)
+	if err != nil {
+		fmt.Printf("%s失败: %s\n", baidupcs.OperationShareVarify, err)
+		return
+	}
+
+	fmt.Printf("sourceID: %s, 有效: %t\n", sourceID, valid)
+}
+
+// RunShareParse 验证分享
+func RunShareTransfer(sourceID string, pwd string, path string) {
+	ErrorNo, err := GetBaiduPCS().ShareTransfer(sourceID, pwd, path)
+	if err != nil {
+		fmt.Printf("%s失败: %s\n", baidupcs.OperationShareTransfer, err)
+		return
+	}
+	if ErrorNo != 0 {
+		fmt.Printf("%s失败: %s\n", baidupcs.OperationShareTransfer, pcserror.FindPanErr(ErrorNo))
+		return
+
+	}
+	fmt.Println(ErrorNo)
+}
+
+// RunShareParse 验证分享
+func RunShareParse(sourceID string, pwd string) {
+	shareFileInfo, err := GetBaiduPCS().ShareParse(sourceID, pwd)
+	if err != nil {
+		fmt.Printf("%s失败: %s\n", baidupcs.OperationShareVarify, err)
+		return
+	}
+	if shareFileInfo.FsIds == nil || len(shareFileInfo.FsIds) == 0 {
+		fmt.Printf("%s失败: %s\n", baidupcs.OperationShareVarify, "获取文件ID失败")
+	}
+	jsons, err1 := json.Marshal(shareFileInfo)
+	if err1 != nil {
+		fmt.Printf("%s失败: %s\n", baidupcs.OperationShareVarify, err1)
+		return
+	}
+	fmt.Printf(string(jsons))
 }
 
 // RunShareCancel 执行取消分享

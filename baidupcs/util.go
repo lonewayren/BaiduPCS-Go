@@ -71,3 +71,15 @@ func GetHTTPScheme(https bool) (scheme string) {
 	}
 	return "http"
 }
+
+func removeDuplicateElement(addrs []int64) []int64 {
+	result := make([]int64, 0, len(addrs))
+	temp := map[int64]struct{}{}
+	for _, item := range addrs {
+		if _, ok := temp[item]; !ok {
+			temp[item] = struct{}{}
+			result = append(result, item)
+		}
+	}
+	return result
+}
